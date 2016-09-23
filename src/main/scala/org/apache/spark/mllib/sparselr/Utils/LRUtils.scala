@@ -91,13 +91,18 @@ object LRUtils {
 
         val indices = new PrimitiveVector[Int]()
         val values = new PrimitiveVector[Float]()
+        val binaryIndices = new PrimitiveVector[Int]()
         featureIdAndValues.foreach { item =>
           val featureAndValue = item.split(":")
-          indices += featureAndValue(0).toInt
           val value = featureAndValue(1).toFloat
-          values += value
+          if(value == 1) {
+            binaryIndices += featureAndValue(0).toInt
+          } else if(value != 0) {
+            indices += featureAndValue(0).toInt
+            values += value
+          }
         }
-        builder.add(new SparseVector(indices.trim.array, values.trim.array))
+        builder.add(new SparseVector(indices.trim.array, values.trim.array, binaryIndices.trim.array))
       }
       Iterator((labels.trim.array, builder.toMatrix))
     }

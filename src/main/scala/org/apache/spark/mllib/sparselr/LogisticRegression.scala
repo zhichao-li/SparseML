@@ -56,6 +56,44 @@ object LogisticRegression {
       ((global2hdfsIndex, newWeights.toArray))
     }
 
+  def train2(input: RDD[(Double, Vector)],
+             optimizer: Optimizer
+            ): (Array[Int], Array[Double]) = {
+
+    var hdfsIndex2global = new Int2IntOpenHashMap()
+    var index = 0
+
+    val global2hdfsIndex = input.map { point =>
+      point._2 match {
+        case x: SparseVector =>
+          x.indices ++ x.binaryIndices
+
+        case _ =>
+          throw new IllegalArgumentException(s"dot doesn't support ${input.getClass}.")
+      }
+    }.collect().flatMap(t => t).distinct
+
+    global2hdfsIndex.foreach{value =>
+      hdfsIndex2global.put(value, index)
+      index += 1
+    }
+
+    val bcHdfsIndex2global = input.context.broadcast(hdfsIndex2global)
+
+    val examples = input.map(hdfs2globalMapping(bcHdfsIndex2global)).cache()
+
+    val numTraining = examples.count()
+    println(s"Training: $numTraining.")
+
+    SparkEnv.get.blockManager.removeBroadcast(bcHdfsIndex2global.id, true)
+
+    val weights = Vectors.dense(new Array[Double](global2hdfsIndex.length))
+
+    val newWeights = optimizer.optimize(examples, weights)
+
+    ((global2hdfsIndex, newWeights.toArray))
+  }
+
   //globalId to localId for mappings in Matrix
     def global2globalMapping(bchdfsIndex2global: Broadcast[Int2IntOpenHashMap])
                      (partition: (Array[Double], Matrix)): (Array[Double], Matrix) = {
@@ -72,4 +110,22 @@ object LogisticRegression {
       }
       partition
     }
+
+  def hdfs2globalMapping(bchdfsIndex2global: Broadcast[Int2IntOpenHashMap])
+                        (point: (Double, Vector)): ((Double, Vector)) = {
+    val hdfsIndex2global = bchdfsIndex2global.value
+
+    point._2 match {
+      case x: SparseVector =>
+        for (i <- 0 until x.indices.length) {
+          x.indices(i) = hdfsIndex2global.get(x.indices(i))
+        }
+        for (i <- 0 until x.binaryIndices.length) {
+          x.binaryIndices(i) = hdfsIndex2global.get(x.binaryIndices(i))
+        }
+      case _ =>
+        throw new IllegalArgumentException(s"dot doesn't support ${point.getClass}.")
+    }
+    point
+  }
 }
