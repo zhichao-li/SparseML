@@ -1,9 +1,9 @@
 package com.intel.webscaleml.examples.logisticRegression
 
-import com.intel.webscaleml.algorithms.logisticRegression._
 import org.apache.spark.{SparkConf, SparkContext}
 import scopt.OptionParser
-import com.intel.webscaleml.algorithms.logisticRegression.Utils.LRUtils
+import org.apache.spark.mllib.sparselr.Utils.LRUtils
+import org.apache.spark.mllib.sparselr.{GradientDescent, LogisticGradient, LogisticRegression, SimpleUpdater}
 
 object LogisticRegressionExample {
   case class Params(
@@ -79,13 +79,13 @@ object LogisticRegressionExample {
     //      .setNumIterations(params.numIterations)
     //      .setRegParam(0.25)
 
-    LRUtils.setEncoder(params.encodeType)
+    // LRUtils.setEncoder(params.encodeType)
     var res: (Array[Int], Array[Double]) = null.asInstanceOf[(Array[Int], Array[Double])]
     if(params.compressInput) {
-      val data = LRUtils.loadFileAsMatrix(sc, params.input, params.numPartitions)
+      val data = LRUtils.loadParquetFileAsMatrix(sc, params.input, params.numPartitions)
       res = LogisticRegression.train(data, optimizer)
     } else {
-      val data = LRUtils.loadFileAsVector(sc, params.input, params.numPartitions)
+      val data = LRUtils.loadParquetFileAsVector(sc, params.input, params.numPartitions)
       res = LogisticRegression.train2(data, optimizer)
     }
 

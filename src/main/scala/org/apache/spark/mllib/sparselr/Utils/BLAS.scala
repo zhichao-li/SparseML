@@ -23,14 +23,14 @@ object BLAS extends Serializable with Logging{
    */
   def dot(x: Vector, y: Vector): Double = {
     (x, y) match {
-      case (cx: CompressedSparseVector, hy: DenseVector) =>
-        dot(cx, hy)
+      case (_: CompressedSparseVector, _: DenseVector) | (_: SparseVector, _: DenseVector) =>
+        _dot(x, y)
       case _ =>
         throw new IllegalArgumentException(s"dot doesn't support (${x.getClass}, ${y.getClass}).")
     }
   }
 
-  private def dot(x: CompressedSparseVector, y: DenseVector): Double = {
+  private def _dot(x: Vector, y: Vector): Double = {
     var margin = 0.0
     x.iterator.foreach { keyVal =>
       margin += (y(keyVal._1) * keyVal._2)
@@ -66,10 +66,10 @@ object BLAS extends Serializable with Logging{
    */
     def axpy(a: Double, x: Vector, y: Vector): Unit = {
     (x, y) match {
-        case (cx: CompressedSparseVector, hy: HashedSparseVector) =>
-          axpy(a, cx, hy)
-        case (hx: HashedSparseVector, dy: DenseVector) =>
-          axpy(a, hx, dy)
+        case (_: CompressedSparseVector, _: HashedSparseVector)
+             | (_: HashedSparseVector, _: DenseVector)
+             | (_: SparseVector, _: HashedSparseVector) =>
+          _axpy(a, x, y)
         case _ =>
           throw new IllegalArgumentException(s"dot doesn't support (${x.getClass}, ${y.getClass}).")
       }
@@ -78,16 +78,7 @@ object BLAS extends Serializable with Logging{
   /**
    * y += a * x
    */
-  private def axpy(a: Double, x: HashedSparseVector, y: DenseVector): Unit = {
-    x.iterator.foreach { keyVal =>
-      y(keyVal._1) = a * keyVal._2 + y(keyVal._1)
-    }
-  }
-
-  /**
-   * y += a * x
-   */
-  private def axpy(a: Double, x: CompressedSparseVector, y: HashedSparseVector): Unit = {
+  private def _axpy(a: Double, x: Vector, y: Vector): Unit = {
     x.iterator.foreach { keyVal =>
       y(keyVal._1) = a * keyVal._2 + y(keyVal._1)
     }
