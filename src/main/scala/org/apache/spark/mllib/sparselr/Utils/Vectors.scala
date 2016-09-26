@@ -119,27 +119,35 @@ class HashedSparseVector() extends Vector {
 
 class SparseVector(
           var indices: Array[Int],
-          var values: Array[Float]
+          var values: Array[Float],
+          var binaryIndices: Array[Int]
               ) extends Vector {
 
   override def iterator: Iterator[(Int, Double)] = new Iterator[(Int, Double)] {
     private var pos = 0
+    private var binaryPos = 0
 
     private var index = 0
-    private var value = 0.0
+    private var value = 0.0f
 
-    override def hasNext: Boolean = pos < indices.length
+    override def hasNext: Boolean = (pos < indices.length) || (binaryPos < binaryIndices.length)
 
     override def next(): (Int, Double) = {
-      index = indices(pos)
-      value = values(pos)
-      pos += 1
+      if(pos < indices.length) {
+        index = indices(pos)
+        value = values(pos)
+        pos += 1
+      } else {
+        index = binaryIndices(binaryPos)
+        value = 1.0f
+        binaryPos += 1
+      }
       (index, value)
     }
   }
 
   override def copy: SparseVector = {
-    new SparseVector(indices.clone(), values.clone())
+    new SparseVector(indices.clone(), values.clone(), binaryIndices.clone())
   }
 }
 

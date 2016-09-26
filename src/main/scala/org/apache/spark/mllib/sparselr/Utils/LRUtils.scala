@@ -2,6 +2,10 @@ package org.apache.spark.mllib.sparselr.Utils
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+
+import scala.collection.mutable
 
 object LRUtils {
   /**
@@ -91,15 +95,85 @@ object LRUtils {
 
         val indices = new PrimitiveVector[Int]()
         val values = new PrimitiveVector[Float]()
+        val binaryIndices = new PrimitiveVector[Int]()
         featureIdAndValues.foreach { item =>
           val featureAndValue = item.split(":")
-          indices += featureAndValue(0).toInt
           val value = featureAndValue(1).toFloat
-          values += value
+          if(value == 1) {
+            binaryIndices += featureAndValue(0).toInt
+          } else if(value != 0) {
+            indices += featureAndValue(0).toInt
+            values += value
+          }
         }
-        builder.add(new SparseVector(indices.trim.array, values.trim.array))
+        builder.add(new SparseVector(indices.trim.array, values.trim.array, binaryIndices.trim.array))
       }
       Iterator((labels.trim.array, builder.toMatrix))
+    }
+    data
+  }
+
+  def loadParquetFileAsMatrix(sc: SparkContext, parquetPath: String, minPartitions: Int): RDD[(Array[Double], Matrix)] = {
+    var dfRDD = new SQLContext(sc).read.parquet(parquetPath).rdd
+
+    //    if (dfRDD.getNumPartitions < minPartitions) {
+    //      log.info(s"repartitioning from ${dfRDD.getNumPartitions} to ${minPartitions}")
+    //      dfRDD = dfRDD.repartition(minPartitions)
+    //    }
+
+    val data = dfRDD.mapPartitions { samples =>
+      val labels = new PrimitiveVector[Double]()
+      val builder = new MatrixBuilder()
+
+      samples.foreach { sample =>
+        labels += sample.getAs[Float]("YValue").toDouble
+
+        val indices = new PrimitiveVector[Int]()
+        val values = new PrimitiveVector[Float]()
+        val binaryIndices = new PrimitiveVector[Int]()
+
+        val features = sample.getAs[mutable.WrappedArray[GenericRowWithSchema]]("features")
+        features.foreach { feature =>
+          val value = feature.getAs[Float](1)
+          if (value == 1) {
+            binaryIndices += feature.getAs[Int](0)
+          } else if (value != 0) {
+            indices += feature.getAs[Int](0)
+            values += value
+          }
+        }
+        builder.add(new SparseVector(indices.trim.array, values.trim.array, binaryIndices.trim.array))
+      }
+      Iterator((labels.trim.array, builder.toMatrix))
+    }
+    data
+  }
+
+  def loadParquetFileAsVector(sc: SparkContext, parquetPath: String, minPartitions: Int): RDD[(Double, Vector)] = {
+    var dfRDD = new SQLContext(sc).read.parquet(parquetPath).rdd
+
+    //    if (dfRDD.getNumPartitions < minPartitions) {
+    //      log.info(s"repartitioning from ${dfRDD.getNumPartitions} to ${minPartitions}")
+    //      dfRDD = dfRDD.repartition(minPartitions)
+    //    }
+
+    val data = dfRDD.map { row =>
+      val YValue = row.getAs[Float]("YValue")
+      val indices = new PrimitiveVector[Int]()
+      val values = new PrimitiveVector[Float]()
+      val binaryIndices = new PrimitiveVector[Int]()
+
+      val features = row.getAs[mutable.WrappedArray[GenericRowWithSchema]]("features")
+      features.foreach { feature =>
+        val value = feature.getAs[Float](1)
+        if (value == 1) {
+          binaryIndices += feature.getAs[Int](0)
+        } else if (value != 0) {
+          indices += feature.getAs[Int](0)
+          values += value
+        }
+      }
+      (YValue.toDouble, new SparseVector(indices.trim().array, values.trim().array, binaryIndices.trim().array).asInstanceOf[Vector])
     }
     data
   }
